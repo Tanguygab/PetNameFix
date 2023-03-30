@@ -65,6 +65,7 @@ public class NMSStorage {
      * 			If any class, field or method fails to load
      */
     public NMSStorage() throws ReflectiveOperationException {
+        if (minorVersion < 9) return;
         try {
             Class.forName("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket");
             is1_19_3Plus = true;

@@ -4,7 +4,6 @@ import io.github.tanguygab.petnamefix.nms.NMSStorage;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PetNameFix extends JavaPlugin implements Listener {
@@ -15,16 +14,18 @@ public final class PetNameFix extends JavaPlugin implements Listener {
     public void onEnable() {
         try {
             NMSStorage nms = new NMSStorage();
-            NMSStorage.setInstance(nms);
             if (nms.getMinorVersion() < 9) {
-                getLogger().severe("Unsupported server software, this plugin is only required on MC 1.9+, disabling");
+                getLogger().severe("Unsupported server software, this plugin is only required on MC 1.9-1.19.4, disabling");
                 getServer().getPluginManager().disablePlugin(this);
                 return;
             }
+            NMSStorage.setInstance(nms);
             pipeline = new PipelineInjector();
             getServer().getPluginManager().registerEvents(this,this);
         } catch (ReflectiveOperationException e) {
+            getLogger().severe("Unsupported server software/version (MC 1.9-1.19.4), disabling...");
             e.printStackTrace();
+            getServer().getPluginManager().disablePlugin(this);
         }
     }
 
@@ -38,8 +39,5 @@ public final class PetNameFix extends JavaPlugin implements Listener {
     public void onJoin(PlayerJoinEvent e) {
         pipeline.inject(e.getPlayer());
     }
-    @EventHandler
-    public void onLeave(PlayerQuitEvent e) {
-        pipeline.uninject(e.getPlayer());
-    }
+
 }
