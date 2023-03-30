@@ -14,11 +14,17 @@ public final class PetNameFix extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         try {
-            NMSStorage.setInstance(new NMSStorage());
+            NMSStorage nms = new NMSStorage();
+            NMSStorage.setInstance(nms);
+            if (nms.getMinorVersion() < 9) {
+                getLogger().severe("Unsupported server software, this plugin is only required on MC 1.9+, disabling");
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
             pipeline = new PipelineInjector();
             getServer().getPluginManager().registerEvents(this,this);
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
     }
 
