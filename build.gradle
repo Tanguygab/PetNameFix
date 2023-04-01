@@ -15,11 +15,16 @@ repositories {
         name = "sonatype"
         url = "https://oss.sonatype.org/content/groups/public/"
     }
+    maven {
+        name = 'viaversion-repo'
+        url = 'https://repo.viaversion.com'
+    }
 }
 
 dependencies {
     compileOnly "org.spigotmc:spigot-api:1.19.4-R0.1-SNAPSHOT"
     compileOnly 'io.netty:netty-all:4.1.86.Final'
+    compileOnly 'com.viaversion:viaversion-api:4.6.2'
 }
 
 processResources {
