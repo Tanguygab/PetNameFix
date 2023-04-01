@@ -53,9 +53,6 @@ public class NMSStorage {
     public Field PacketPlayOutSpawnEntityLiving_DATAWATCHER;
 
     //other entity packets
-    public final Class<?> PacketPlayInUseEntity = getNMSClass("net.minecraft.network.protocol.game.PacketPlayInUseEntity", "PacketPlayInUseEntity", "Packet7UseEntity");
-    public Class<?> PacketPlayInUseEntity$d;
-    public Field PacketPlayInUseEntity_ACTION;
     public final Class<?> PacketPlayOutEntityMetadata = getNMSClass("net.minecraft.network.protocol.game.PacketPlayOutEntityMetadata", "PacketPlayOutEntityMetadata", "Packet40EntityMetadata");
     public final Field PacketPlayOutEntityMetadata_LIST = getFields(PacketPlayOutEntityMetadata, List.class).get(0);
 
@@ -73,8 +70,9 @@ public class NMSStorage {
         Class<?> NetworkManager = getNMSClass("net.minecraft.network.NetworkManager", "NetworkManager");
         NETWORK_MANAGER = getFields(PlayerConnection, NetworkManager).get(0);
         CHANNEL = getFields(NetworkManager, Channel.class).get(0);
+
         initializeDataWatcher();
-        initializeEntityPackets();
+        if (minorVersion <= 14) PacketPlayOutSpawnEntityLiving_DATAWATCHER = getFields(PacketPlayOutSpawnEntityLiving, DataWatcher).get(0);
     }
 
     /**
@@ -108,13 +106,6 @@ public class NMSStorage {
         DataWatcher$DataValue_VALUE = getFields(DataWatcher$DataValue, Object.class).get(0);
         DataWatcher_b = DataWatcher.getMethod("b");
         DataWatcher_markDirty = getMethods(DataWatcher, DataWatcherObject).get(0);
-    }
-
-    private void initializeEntityPackets() throws ReflectiveOperationException {
-        if (minorVersion >= 17) PacketPlayInUseEntity$d = Class.forName("net.minecraft.network.protocol.game.PacketPlayInUseEntity$d");
-        if (minorVersion <= 14) PacketPlayOutSpawnEntityLiving_DATAWATCHER = getFields(PacketPlayOutSpawnEntityLiving, DataWatcher).get(0);
-        Class<?> EnumEntityUseAction = getNMSClass("net.minecraft.network.protocol.game.PacketPlayInUseEntity$EnumEntityUseAction", "PacketPlayInUseEntity$EnumEntityUseAction", "EnumEntityUseAction", "net.minecraft.class_2824$class_5906");
-        PacketPlayInUseEntity_ACTION = getFields(PacketPlayInUseEntity, EnumEntityUseAction).get(0);
     }
 
     /**

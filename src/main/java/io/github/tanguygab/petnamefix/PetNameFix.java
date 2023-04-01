@@ -1,9 +1,12 @@
 package io.github.tanguygab.petnamefix;
 
 import io.github.tanguygab.petnamefix.nms.NMSStorage;
+import org.bukkit.entity.Tameable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PetNameFix extends JavaPlugin implements Listener {
@@ -38,6 +41,14 @@ public final class PetNameFix extends JavaPlugin implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         pipeline.inject(e.getPlayer());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onClick(PlayerInteractEntityEvent e) {
+        if (!(e.getRightClicked() instanceof Tameable)) return;
+        Tameable pet = (Tameable) e.getRightClicked();
+        if (pet.isTamed() && pet.getOwner() == e.getPlayer() && e.getHand() == EquipmentSlot.OFF_HAND)
+            e.setCancelled(true);
     }
 
 }
