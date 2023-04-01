@@ -1,6 +1,7 @@
 package io.github.tanguygab.petnamefix;
 
 import com.google.common.base.Optional;
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
 import io.github.tanguygab.petnamefix.nms.DataWatcher;
 import io.github.tanguygab.petnamefix.nms.DataWatcherItem;
 import io.github.tanguygab.petnamefix.nms.NMSStorage;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.WeakHashMap;
 import java.util.function.Function;
+import com.viaversion.viaversion.api.Via;
 
 public class PipelineInjector {
 
@@ -58,7 +60,9 @@ public class PipelineInjector {
     }
 
     private int getMinorVersion(Player p) {
-        return 19;
+        if (!Bukkit.getServer().getPluginManager().isPluginEnabled("ViaVersion")) return nms.getMinorVersion();
+        ProtocolVersion ver = ProtocolVersion.getProtocol(Via.getAPI().getPlayerVersion(p.getUniqueId()));
+        return Integer.parseInt(ver.getIncludedVersions().stream().findFirst().get().split("\\.")[1]);
     }
 
     public void inject(Player player) {
