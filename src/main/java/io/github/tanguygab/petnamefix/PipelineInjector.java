@@ -67,35 +67,16 @@ public class PipelineInjector {
     public class BukkitChannelDuplexHandler extends ChannelDuplexHandler {
 
         @Override
-        @SuppressWarnings("unchecked")
         public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) throws Exception {
-            if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
-                Object removedEntry = null;
-                List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
-                if (items == null) return;
-                try {
-                    for (Object item : items) {
-                        if (item == null) continue;
-                        int slot;
-                        Object value;
-                        if (nms.is1_19_3Plus()) {
-                            slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
-                            value = nms.DataWatcher$DataValue_VALUE.get(item);
-                        } else {
-                            slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
-                            value = nms.DataWatcherItem_VALUE.get(item);
-                        }
-                        if (slot == petOwnerPosition) {
-                            if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
-                                removedEntry = item;
-                            }
-                        }
+            if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
+                Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
+                for (Object pack : packets) {
+                    if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
+                        checkMetaData(pack);
                     }
-                } catch (ConcurrentModificationException e) {
-                    //no idea how can this list change in another thread since it's created for the packet but whatever, try again
-                    write(ctx,packet,promise);
                 }
-                if (removedEntry != null) items.remove(removedEntry);
+            } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
+                checkMetaData(packet);
             } else if (nms.PacketPlayOutSpawnEntityLiving.isInstance(packet) && nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER != null) {
                 //<1.15
                 DataWatcher watcher = DataWatcher.fromNMS(nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.get(packet));
@@ -109,4 +90,33 @@ public class PipelineInjector {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private void checkMetaData(Object packet) throws ReflectiveOperationException {
+        Object removedEntry = null;
+        List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
+        if (items == null) return;
+        try {
+            for (Object item : items) {
+                if (item == null) continue;
+                int slot;
+                Object value;
+                if (nms.is1_19_3Plus()) {
+                    slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
+                    value = nms.DataWatcher$DataValue_VALUE.get(item);
+                } else {
+                    slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
+                    value = nms.DataWatcherItem_VALUE.get(item);
+                }
+                if (slot == petOwnerPosition) {
+                    if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
+                        removedEntry = item;
+                    }
+                }
+            }
+        } catch (ConcurrentModificationException e) {
+            //no idea how can this list change in another thread since it's created for the packet but whatever, try again
+            checkMetaData(packet);
+        }
+        if (removedEntry != null) items.remove(removedEntry);
+    }
 }

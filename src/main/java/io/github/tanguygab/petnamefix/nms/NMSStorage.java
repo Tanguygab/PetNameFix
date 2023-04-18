@@ -18,7 +18,8 @@ public class NMSStorage {
     //server minor version such as "16"
     private final int minorVersion = Integer.parseInt(serverPackage.split("_")[1]);
 
-    private boolean is1_19_3Plus;
+    private final boolean is1_19_3Plus = classExists("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket");
+    private final boolean is1_19_4Plus = is1_19_3Plus && !serverPackage.equals("v1_19_R2");
 
     //base
     private final Class<?> EntityPlayer = getNMSClass("net.minecraft.server.level.EntityPlayer", "EntityPlayer");
@@ -56,6 +57,9 @@ public class NMSStorage {
     public final Class<?> PacketPlayOutEntityMetadata = getNMSClass("net.minecraft.network.protocol.game.PacketPlayOutEntityMetadata", "PacketPlayOutEntityMetadata", "Packet40EntityMetadata");
     public final Field PacketPlayOutEntityMetadata_LIST = getFields(PacketPlayOutEntityMetadata, List.class).get(0);
 
+    public Class<?> ClientboundBundlePacket;
+    public Field ClientboundBundlePacket_packets;
+
     /**
      * Creates new instance, initializes required NMS classes and fields
      * @throws	ReflectiveOperationException
@@ -63,16 +67,16 @@ public class NMSStorage {
      */
     public NMSStorage() throws ReflectiveOperationException {
         if (minorVersion < 9) return;
-        try {
-            Class.forName("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket");
-            is1_19_3Plus = true;
-        } catch (ClassNotFoundException ignored) {}
         Class<?> NetworkManager = getNMSClass("net.minecraft.network.NetworkManager", "NetworkManager");
         NETWORK_MANAGER = getFields(PlayerConnection, NetworkManager).get(0);
         CHANNEL = getFields(NetworkManager, Channel.class).get(0);
 
         initializeDataWatcher();
         if (minorVersion <= 14) PacketPlayOutSpawnEntityLiving_DATAWATCHER = getFields(PacketPlayOutSpawnEntityLiving, DataWatcher).get(0);
+        if (is1_19_4Plus) {
+            ClientboundBundlePacket = getNMSClass("net.minecraft.network.protocol.game.ClientboundBundlePacket");
+            (ClientboundBundlePacket_packets = ClientboundBundlePacket.getSuperclass().getDeclaredFields()[0]).setAccessible(true);
+        }
     }
 
     /**
@@ -153,7 +157,7 @@ public class NMSStorage {
      */
     private Method getMethod(Class<?> clazz, String[] names, Class<?>... parameterTypes) throws NoSuchMethodException {
         for (String name : names)
-            try {return getMethod(clazz, name, parameterTypes);}
+            try {return clazz.getMethod(name, parameterTypes);}
             catch (NoSuchMethodException e) {/*not the first method in array*/}
 
         List<String> list = new ArrayList<>();
@@ -171,24 +175,6 @@ public class NMSStorage {
         }
         throw new NoSuchMethodException("No method found with possible names " + Arrays.toString(names) + " with parameters " +
                 Arrays.toString(parameterTypes) + " in class " + clazz.getName() + ". Methods with matching parameters: " + list);
-    }
-
-    private Method getMethod(Class<?> clazz, String name, Class<?>... parameterTypes) throws NoSuchMethodException {
-        List<Method> list = new ArrayList<>();
-        for (Method m : clazz.getMethods()) {
-            if (!m.getName().equals(name) || m.getParameterCount() != parameterTypes.length) continue;
-            Class<?>[] types = m.getParameterTypes();
-            boolean valid = true;
-            for (int i=0; i<types.length; i++) {
-                if (types[i] != parameterTypes[i]) {
-                    valid = false;
-                    break;
-                }
-            }
-            if (valid) list.add(m);
-        }
-        if (!list.isEmpty()) return list.get(0);
-        throw new NoSuchMethodException("No method found with name " + name + " in class " + clazz.getName() + " with parameters " + Arrays.toString(parameterTypes));
     }
 
     private List<Method> getMethods(Class<?> clazz, Class<?>... parameterTypes){
@@ -232,5 +218,18 @@ public class NMSStorage {
 
     public boolean is1_19_3Plus() {
         return is1_19_3Plus;
+    }
+
+    public boolean is1_19_4Plus() {
+        return is1_19_4Plus;
+    }
+
+    private boolean classExists(String path) {
+        try {
+            Class.forName(path);
+            return true;
+        } catch (ClassNotFoundException | NullPointerException e) {
+            return false;
+        }
     }
 }
