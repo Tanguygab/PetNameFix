@@ -68,7 +68,9 @@ public class NMSStorage {
     public NMSStorage() throws ReflectiveOperationException {
         if (minorVersion < 9) return;
         Class<?> NetworkManager = getNMSClass("net.minecraft.network.NetworkManager", "NetworkManager");
-        NETWORK_MANAGER = getFields(PlayerConnection, NetworkManager).get(0);
+        NETWORK_MANAGER = getFields(PlayerConnection, NetworkManager).isEmpty()
+                ? getFields(PlayerConnection.getSuperclass(), NetworkManager).get(0)
+                : getFields(PlayerConnection, NetworkManager).get(0);
         CHANNEL = getFields(NetworkManager, Channel.class).get(0);
 
         initializeDataWatcher();
