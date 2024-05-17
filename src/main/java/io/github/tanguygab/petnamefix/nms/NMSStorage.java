@@ -1,6 +1,5 @@
 package io.github.tanguygab.petnamefix.nms;
 
-import io.github.tanguygab.petnamefix.PetNameFix;
 import io.netty.channel.Channel;
 import org.bukkit.Bukkit;
 
@@ -12,31 +11,28 @@ public class NMSStorage {
     //instance of this class
     private static NMSStorage instance;
 
-    //server package, such as "v1_16_R3"
-    private final String serverPackage = Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3];
 
     //server minor version such as "16"
-    private final int minorVersion = Integer.parseInt(serverPackage.split("_")[1]);
+    private int minorVersion;
+    private FunctionWithException<String, Class<?>> classFunction;
 
     private final boolean is1_19_3Plus = classExists("net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket");
-    private final boolean is1_19_4Plus = is1_19_3Plus && !serverPackage.equals("v1_19_R2");
+    private final boolean is1_19_4Plus;
 
     //base
-    private final Class<?> EntityPlayer = getNMSClass("net.minecraft.server.level.EntityPlayer", "EntityPlayer");
-    private final Class<?> PlayerConnection = getNMSClass("net.minecraft.server.network.PlayerConnection", "PlayerConnection");
-    public final Field PLAYER_CONNECTION = getFields(EntityPlayer, PlayerConnection).get(0);
+    public Field PLAYER_CONNECTION;
     public Field NETWORK_MANAGER;
     public Field CHANNEL;
-    public final Method getHandle = Class.forName("org.bukkit.craftbukkit." + serverPackage + ".entity.CraftPlayer").getMethod("getHandle");
+    public final Method getHandle = Class.forName(Bukkit.getServer().getClass().getPackage().getName() + ".entity.CraftPlayer").getMethod("getHandle");
 
     //DataWatcher
-    private final Class<?> DataWatcher = getNMSClass("net.minecraft.network.syncher.DataWatcher", "DataWatcher");
-    private final Class<?> DataWatcherItem = getNMSClass("net.minecraft.network.syncher.DataWatcher$Item", "DataWatcher$Item", "DataWatcher$WatchableObject", "WatchableObject");
+    private Class<?> DataWatcher;
+    private Class<?> DataWatcherItem;
     public Class<?> DataWatcherRegistry;
-    public final Constructor<?> newDataWatcher = DataWatcher.getConstructors()[0];
+    public Constructor<?> newDataWatcher;
     public Constructor<?> newDataWatcherObject;
     public Field DataWatcherItem_TYPE;
-    public final Field DataWatcherItem_VALUE = getFields(DataWatcherItem, Object.class).get(0);
+    public Field DataWatcherItem_VALUE;
     public Field DataWatcherObject_SLOT;
     public Field DataWatcherObject_SERIALIZER;
     public Method DataWatcher_REGISTER;
@@ -48,35 +44,71 @@ public class NMSStorage {
     public Method DataWatcher_markDirty;
 
     //PacketPlayOutSpawnEntityLiving
-    public final Class<?> PacketPlayOutSpawnEntityLiving = getNMSClass("net.minecraft.network.protocol.game.PacketPlayOutSpawnEntityLiving",
-            "net.minecraft.network.protocol.game.PacketPlayOutSpawnEntity", "PacketPlayOutSpawnEntityLiving", "Packet24MobSpawn");
+    public Class<?> PacketPlayOutSpawnEntityLiving;
 
     public Field PacketPlayOutSpawnEntityLiving_DATAWATCHER;
 
     //other entity packets
-    public final Class<?> PacketPlayOutEntityMetadata = getNMSClass("net.minecraft.network.protocol.game.PacketPlayOutEntityMetadata", "PacketPlayOutEntityMetadata", "Packet40EntityMetadata");
-    public final Field PacketPlayOutEntityMetadata_LIST = getFields(PacketPlayOutEntityMetadata, List.class).get(0);
+    public Class<?> PacketPlayOutEntityMetadata;
+    public Field PacketPlayOutEntityMetadata_LIST;
 
     public Class<?> ClientboundBundlePacket;
     public Field ClientboundBundlePacket_packets;
 
     /**
      * Creates new instance, initializes required NMS classes and fields
-     * @throws	ReflectiveOperationException
-     * 			If any class, field or method fails to load
      */
+
+    private void detectServerVersion() {
+        FunctionWithException<String, Class<?>> classFunction = name -> Class.forName("net.minecraft." + name);
+        String[] array = Bukkit.getServer().getClass().getPackage().getName().split("\\.");
+        int minorVersion;
+        if (array.length > 3) {
+            // Normal packaging
+            String serverPackage = array[3];
+            minorVersion = Integer.parseInt(serverPackage.split("_")[1]);
+            if (minorVersion < 17) {
+                ClassLoader loader = NMSStorage.class.getClassLoader();
+                classFunction = name -> loader.loadClass("net.minecraft.server." + serverPackage + "." + name);
+            }
+        } else {
+            // Paper without CB relocation
+            minorVersion = Integer.parseInt(Bukkit.getBukkitVersion().split("-")[0].split("\\.")[1]);
+        }
+
+        this.classFunction = classFunction;
+        this.minorVersion = minorVersion;
+    }
+
     public NMSStorage() throws ReflectiveOperationException {
+        detectServerVersion();
+
+        is1_19_4Plus = is1_19_3Plus && (minorVersion > 19 || !Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3].equals("v1_19_R2"));
+
         if (minorVersion < 9) return;
-        Class<?> NetworkManager = getNMSClass("net.minecraft.network.NetworkManager", "NetworkManager");
-        NETWORK_MANAGER = getFields(PlayerConnection, NetworkManager).isEmpty()
-                ? getFields(PlayerConnection.getSuperclass(), NetworkManager).get(0)
-                : getFields(PlayerConnection, NetworkManager).get(0);
+
+        Class<?> entityPlayer = getClass("server.level.EntityPlayer", "EntityPlayer");
+        Class<?> playerConnection = getClass("server.network.PlayerConnection", "PlayerConnection");
+        PLAYER_CONNECTION = getFields(entityPlayer, playerConnection).get(0);
+        DataWatcher = getClass("network.syncher.SynchedEntityData", "network.syncher.DataWatcher", "DataWatcher");
+        DataWatcherItem = getClass("network.syncher.DataWatcher$Item", "DataWatcher$Item", "DataWatcher$WatchableObject", "WatchableObject");
+        newDataWatcher = DataWatcher.getConstructor(getClass("world.entity.Entity", "Entity"));
+        DataWatcherItem_VALUE = getFields(DataWatcherItem, Object.class).get(0);
+        PacketPlayOutSpawnEntityLiving = getClass("network.protocol.game.PacketPlayOutSpawnEntityLiving",
+                "network.protocol.game.PacketPlayOutSpawnEntity", "PacketPlayOutSpawnEntityLiving", "Packet24MobSpawn");
+        PacketPlayOutEntityMetadata = getClass("network.protocol.game.PacketPlayOutEntityMetadata", "PacketPlayOutEntityMetadata", "Packet40EntityMetadata");
+        PacketPlayOutEntityMetadata_LIST = getFields(PacketPlayOutEntityMetadata, List.class).get(0);
+
+        Class<?> NetworkManager = getClass("network.NetworkManager", "NetworkManager");
+        NETWORK_MANAGER = getFields(playerConnection, NetworkManager).isEmpty()
+                ? getFields(playerConnection.getSuperclass(), NetworkManager).get(0)
+                : getFields(playerConnection, NetworkManager).get(0);
         CHANNEL = getFields(NetworkManager, Channel.class).get(0);
 
         initializeDataWatcher();
         if (minorVersion <= 14) PacketPlayOutSpawnEntityLiving_DATAWATCHER = getFields(PacketPlayOutSpawnEntityLiving, DataWatcher).get(0);
         if (is1_19_4Plus) {
-            ClientboundBundlePacket = getNMSClass("net.minecraft.network.protocol.game.ClientboundBundlePacket");
+            ClientboundBundlePacket = getClass("network.protocol.game.ClientboundBundlePacket");
             (ClientboundBundlePacket_packets = ClientboundBundlePacket.getSuperclass().getDeclaredFields()[0]).setAccessible(true);
         }
     }
@@ -98,9 +130,9 @@ public class NMSStorage {
     }
 
     private void initializeDataWatcher() throws ReflectiveOperationException {
-        Class<?> DataWatcherObject = getNMSClass("net.minecraft.network.syncher.DataWatcherObject", "DataWatcherObject");
-        DataWatcherRegistry = getNMSClass("net.minecraft.network.syncher.DataWatcherRegistry", "DataWatcherRegistry");
-        Class<?> DataWatcherSerializer = getNMSClass("net.minecraft.network.syncher.DataWatcherSerializer", "DataWatcherSerializer");
+        Class<?> DataWatcherObject = getClass("network.syncher.DataWatcherObject", "DataWatcherObject");
+        DataWatcherRegistry = getClass("network.syncher.DataWatcherRegistry", "DataWatcherRegistry");
+        Class<?> DataWatcherSerializer = getClass("network.syncher.DataWatcherSerializer", "DataWatcherSerializer");
         newDataWatcherObject = DataWatcherObject.getConstructor(int.class, DataWatcherSerializer);
         DataWatcherItem_TYPE = getFields(DataWatcherItem, DataWatcherObject).get(0);
         DataWatcherObject_SLOT = getFields(DataWatcherObject, int.class).get(0);
@@ -120,33 +152,21 @@ public class NMSStorage {
      * @return class for specified name(s)
      * @throws ClassNotFoundException if class does not exist
      */
-    private Class<?> getNMSClass(String... names) throws ClassNotFoundException {
-        for (String name : names)
-            try {return minorVersion >= 17 ? Class.forName(name) : getLegacyClass(name);}
-            catch (ClassNotFoundException e) {/*not the first class name in array*/}
-        throw new ClassNotFoundException("No class found with possible names " + Arrays.toString(names));
-    }
-
-    /**
-     * Returns class from given name
-     * @param name - class name
-     * @return class from given name
-     * @throws ClassNotFoundException if class was not found
-     */
-    private Class<?> getLegacyClass(String name) throws ClassNotFoundException {
-        try {
-            return Class.forName("net.minecraft.server." + serverPackage + "." + name);
-        } catch (ClassNotFoundException | NullPointerException e) {
+    private Class<?> getClass(String... names) throws ClassNotFoundException {
+        for (String name : names) {
             try {
-                //modded server?
-                Class<?> clazz = PetNameFix.class.getClassLoader().loadClass("net.minecraft.server." + serverPackage + "." + name);
-                if (clazz != null) return clazz;
-                throw new ClassNotFoundException(name);
-            } catch (ClassNotFoundException | NullPointerException e1) {
-                //maybe fabric?
-                return Class.forName(name);
+                return classFunction.apply(name);
+            } catch (Exception ignored) {
+                // not the first class name in array
             }
         }
+        throw new ClassNotFoundException("No class found with possible names " + Arrays.toString(names));
+    /*
+        for (String name : names)
+            try {return minorVersion >= 17 ? Class.forName(name) : getLegacyClass(name);}
+            catch (ClassNotFoundException e) {/*not the first class name in array/}
+        throw new ClassNotFoundException("No class found with possible names " + Arrays.toString(names));
+    */
     }
 
     /**
