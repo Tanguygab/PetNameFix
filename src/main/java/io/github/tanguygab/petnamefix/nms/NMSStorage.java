@@ -92,7 +92,7 @@ public class NMSStorage {
         PLAYER_CONNECTION = getFields(entityPlayer, playerConnection).get(0);
         DataWatcher = getClass("network.syncher.SynchedEntityData", "network.syncher.DataWatcher", "DataWatcher");
         DataWatcherItem = getClass("network.syncher.DataWatcher$Item", "DataWatcher$Item", "DataWatcher$WatchableObject", "WatchableObject");
-        newDataWatcher = DataWatcher.getConstructor(getClass("world.entity.Entity", "Entity"));
+        if (minorVersion < 20) newDataWatcher = DataWatcher.getConstructor(getClass("world.entity.Entity", "Entity"));
         DataWatcherItem_VALUE = getFields(DataWatcherItem, Object.class).get(0);
         PacketPlayOutSpawnEntityLiving = getClass("network.protocol.game.PacketPlayOutSpawnEntityLiving",
                 "network.protocol.game.PacketPlayOutSpawnEntity", "PacketPlayOutSpawnEntityLiving", "Packet24MobSpawn");
@@ -139,7 +139,7 @@ public class NMSStorage {
         DataWatcherObject_SERIALIZER = getFields(DataWatcherObject, DataWatcherSerializer).get(0);
         DataWatcher_REGISTER = getMethod(DataWatcher, new String[]{"register", "method_12784", "a"}, DataWatcherObject, Object.class);
         if (!is1_19_3Plus()) return;
-        DataWatcher$DataValue = Class.forName("net.minecraft.network.syncher.DataWatcher$b");
+        DataWatcher$DataValue = getClass("network.syncher.SynchedEntityData$DataValue","network.syncher.DataWatcher$b");
         DataWatcher$DataValue_POSITION = getFields(DataWatcher$DataValue, int.class).get(0);
         DataWatcher$DataValue_VALUE = getFields(DataWatcher$DataValue, Object.class).get(0);
         DataWatcher_b = DataWatcher.getMethod("b");
