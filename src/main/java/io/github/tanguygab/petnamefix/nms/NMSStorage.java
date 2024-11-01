@@ -139,7 +139,7 @@ public class NMSStorage {
         DataWatcherObject_SERIALIZER = getFields(DataWatcherObject, DataWatcherSerializer).get(0);
         DataWatcher_REGISTER = getMethod(DataWatcher, new String[]{"register", "method_12784", "a"}, DataWatcherObject, Object.class);
         if (!is1_19_3Plus()) return;
-        DataWatcher$DataValue = getClass("network.syncher.SynchedEntityData$DataValue","network.syncher.DataWatcher$b");
+        DataWatcher$DataValue = getClass("network.syncher.SynchedEntityData$DataValue","network.syncher.DataWatcher$b","network.syncher.DataWatcher$c");
         DataWatcher$DataValue_POSITION = getFields(DataWatcher$DataValue, int.class).get(0);
         DataWatcher$DataValue_VALUE = getFields(DataWatcher$DataValue, Object.class).get(0);
         DataWatcher_b = DataWatcher.getMethod("b");
