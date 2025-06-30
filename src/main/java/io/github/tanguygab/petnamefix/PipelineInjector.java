@@ -76,7 +76,7 @@ public class PipelineInjector {
                     }
                 }
             } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
-                checkMetaData(packet);
+                if (checkMetaData(packet)) return;
             } else if (nms.PacketPlayOutSpawnEntityLiving.isInstance(packet) && nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER != null) {
                 //<1.15
                 DataWatcher watcher = DataWatcher.fromNMS(nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.get(packet));
@@ -91,10 +91,10 @@ public class PipelineInjector {
     }
 
     @SuppressWarnings("unchecked")
-    private void checkMetaData(Object packet) throws ReflectiveOperationException {
+    private boolean checkMetaData(Object packet) throws ReflectiveOperationException {
         Object removedEntry = null;
         List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
-        if (items == null) return;
+        if (items == null) return false;
         try {
             for (Object item : items) {
                 if (item == null) continue;
@@ -115,8 +115,12 @@ public class PipelineInjector {
             }
         } catch (ConcurrentModificationException e) {
             //no idea how can this list change in another thread since it's created for the packet but whatever, try again
-            checkMetaData(packet);
+            return checkMetaData(packet);
         }
-        if (removedEntry != null) items.remove(removedEntry);
+        if (removedEntry != null) {
+            if (items.size() == 1) return true;
+            items.remove(removedEntry);
+        }
+        return false;
     }
 }
