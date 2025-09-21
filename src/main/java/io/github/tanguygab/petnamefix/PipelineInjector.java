@@ -68,25 +68,29 @@ public class PipelineInjector {
 
         @Override
         public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) throws Exception {
-            if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
-                Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
-                for (Object pack : packets) {
-                    if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
-                        checkMetaData(pack);
+            try {
+                if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
+                    Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
+                    for (Object pack : packets) {
+                        if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
+                            checkMetaData(pack);
+                        }
+                    }
+                } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
+                    if (checkMetaData(packet)) return;
+                } else if (nms.PacketPlayOutSpawnEntityLiving.isInstance(packet) && nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER != null) {
+                    //<1.15
+                    DataWatcher watcher = DataWatcher.fromNMS(nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.get(packet));
+                    DataWatcherItem petOwner = watcher.getItem(petOwnerPosition);
+                    if (petOwner != null && (petOwner.getValue() instanceof java.util.Optional || petOwner.getValue() instanceof Optional)) {
+                        watcher.removeValue(petOwnerPosition);
+                        nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.set(packet,watcher.toNMS());
                     }
                 }
-            } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
-                if (checkMetaData(packet)) return;
-            } else if (nms.PacketPlayOutSpawnEntityLiving.isInstance(packet) && nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER != null) {
-                //<1.15
-                DataWatcher watcher = DataWatcher.fromNMS(nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.get(packet));
-                DataWatcherItem petOwner = watcher.getItem(petOwnerPosition);
-                if (petOwner != null && (petOwner.getValue() instanceof java.util.Optional || petOwner.getValue() instanceof Optional)) {
-                    watcher.removeValue(petOwnerPosition);
-                    nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.set(packet,watcher.toNMS());
-                }
+                super.write(ctx, packet, promise);
+            } catch (Exception e) {
+                super.write(ctx, packet, promise);
             }
-            super.write(ctx, packet, promise);
         }
     }
 
@@ -94,7 +98,8 @@ public class PipelineInjector {
     private boolean checkMetaData(Object packet) throws ReflectiveOperationException {
         Object removedEntry = null;
         List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
-        if (items == null) return false;
+        if (items == null || items.isEmpty()) return false;
+        
         try {
             for (Object item : items) {
                 if (item == null) continue;
@@ -110,16 +115,23 @@ public class PipelineInjector {
                 if (slot == petOwnerPosition) {
                     if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
                         removedEntry = item;
+                        break;
                     }
                 }
             }
         } catch (ConcurrentModificationException e) {
-            //no idea how can this list change in another thread since it's created for the packet but whatever, try again
             return checkMetaData(packet);
         }
+        
         if (removedEntry != null) {
-            if (items.size() == 1) return true;
+            if (items.size() <= 1) {
+                return true;
+            }
             items.remove(removedEntry);
+            
+            if (items.isEmpty()) {
+                return true;
+            }
         }
         return false;
     }
