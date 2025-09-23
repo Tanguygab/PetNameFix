@@ -2,5 +2,6 @@ name: PetNameFix
 version: '${version}'
 main: io.github.tanguygab.petnamefix.PetNameFix
 api-version: 1.13
+folia-supported: true
 authors: [ NEZNAMY, Tanguygab ]
 description: A feature to disable minecraft 1.9+ feature making tamed animals with custom names copy NameTag properties of their owner.
