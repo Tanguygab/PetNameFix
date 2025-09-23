@@ -129,6 +129,12 @@ public class NMSStorage {
         return instance;
     }
 
+    public static void cleanup() {
+        if (instance != null) {
+            instance = null;
+        }
+    }
+
     private void initializeDataWatcher() throws ReflectiveOperationException {
         Class<?> DataWatcherObject = getClass("network.syncher.DataWatcherObject", "DataWatcherObject");
         DataWatcherRegistry = getClass("network.syncher.DataWatcherRegistry", "DataWatcherRegistry");

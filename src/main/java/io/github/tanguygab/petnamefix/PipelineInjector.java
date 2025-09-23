@@ -11,6 +11,7 @@ import io.netty.channel.ChannelPromise;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.List;
 
@@ -43,17 +44,25 @@ public class PipelineInjector {
 
     public void inject(Player player) {
         final Channel channel = getChannel(player);
-        if (channel != null && channel.pipeline().names().contains("packet_handler"))
+        if (channel != null && channel.pipeline().names().contains("packet_handler")) {
             try {
                 uninject(player);
                 channel.pipeline().addBefore("packet_handler", DECODER_NAME, new BukkitChannelDuplexHandler());
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void uninject(Player player) {
         final Channel channel = getChannel(player);
-        if (channel != null && channel.pipeline().names().contains(DECODER_NAME))
-            channel.pipeline().remove(DECODER_NAME);
+        if (channel != null && channel.pipeline().names().contains(DECODER_NAME)) {
+            try {
+                channel.pipeline().remove(DECODER_NAME);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private Channel getChannel(Player player) {
@@ -96,7 +105,15 @@ public class PipelineInjector {
 
     @SuppressWarnings("unchecked")
     private boolean checkMetaData(Object packet) throws ReflectiveOperationException {
+        return checkMetaData(packet, 0);
+    }
+
+    private boolean checkMetaData(Object packet, int retryCount) throws ReflectiveOperationException {
+        if (retryCount > 3) {
+            return false;
+        }
         Object removedEntry = null;
+        @SuppressWarnings("unchecked")
         List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
         if (items == null || items.isEmpty()) return false;
         
@@ -120,7 +137,14 @@ public class PipelineInjector {
                 }
             }
         } catch (ConcurrentModificationException e) {
-            return checkMetaData(packet);
+            try {
+                @SuppressWarnings("unchecked")
+                List<Object> originalItems = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
+                List<Object> itemsCopy = new ArrayList<>(originalItems);
+                return processMetadataItems(itemsCopy, packet, retryCount + 1);
+            } catch (Exception ex) {
+                return false;
+            }
         }
         
         if (removedEntry != null) {
@@ -133,6 +157,60 @@ public class PipelineInjector {
                 return true;
             }
         }
+        return false;
+    }
+
+    private boolean processMetadataItems(List<Object> itemsCopy, Object packet, int retryCount) throws ReflectiveOperationException {
+        if (retryCount > 3) {
+            return false;
+        }
+
+        Object removedEntry = null;
+        
+        for (Object item : itemsCopy) {
+            if (item == null) continue;
+            int slot;
+            Object value;
+            
+            try {
+                if (nms.is1_19_3Plus()) {
+                    slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
+                    value = nms.DataWatcher$DataValue_VALUE.get(item);
+                } else {
+                    slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
+                    value = nms.DataWatcherItem_VALUE.get(item);
+                }
+                
+                if (slot == petOwnerPosition) {
+                    if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
+                        removedEntry = item;
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                continue;
+            }
+        }
+        
+        if (removedEntry != null) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<Object> originalItems = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
+                
+                if (originalItems.size() <= 1) {
+                    return true;
+                }
+                
+                originalItems.remove(removedEntry);
+                
+                if (originalItems.isEmpty()) {
+                    return true;
+                }
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        
         return false;
     }
 }
