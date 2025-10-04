@@ -28,7 +28,6 @@ public class NMSStorage {
     //DataWatcher
     private Class<?> DataWatcher;
     private Class<?> DataWatcherItem;
-    public Class<?> DataWatcherRegistry;
     public Constructor<?> newDataWatcher;
     public Constructor<?> newDataWatcherObject;
     public Field DataWatcherItem_TYPE;
@@ -36,7 +35,6 @@ public class NMSStorage {
     public Field DataWatcherObject_SLOT;
     public Field DataWatcherObject_SERIALIZER;
     public Method DataWatcher_REGISTER;
-    public Method DataWatcher_b;
     //1.19.3+
     protected Class<?> DataWatcher$DataValue;
     public Field DataWatcher$DataValue_POSITION;
@@ -87,19 +85,29 @@ public class NMSStorage {
 
         if (minorVersion < 9) return;
 
-        Class<?> entityPlayer = getClass("server.level.EntityPlayer", "EntityPlayer");
-        Class<?> playerConnection = getClass("server.network.PlayerConnection", "PlayerConnection");
+        Class<?> entityPlayer = getClass("server.level.ServerPlayer", "server.level.EntityPlayer", "EntityPlayer");
+        Class<?> playerConnection = getClass("server.network.ServerGamePacketListenerImpl", "server.network.PlayerConnection", "PlayerConnection");
         PLAYER_CONNECTION = getFields(entityPlayer, playerConnection).get(0);
         DataWatcher = getClass("network.syncher.SynchedEntityData", "network.syncher.DataWatcher", "DataWatcher");
-        DataWatcherItem = getClass("network.syncher.DataWatcher$Item", "DataWatcher$Item", "DataWatcher$WatchableObject", "WatchableObject");
+        DataWatcherItem = getClass("network.syncher.SynchedEntityData$DataItem", "network.syncher.DataWatcher$Item", "DataWatcher$Item", "DataWatcher$WatchableObject", "WatchableObject");
         if (minorVersion < 20) newDataWatcher = DataWatcher.getConstructor(getClass("world.entity.Entity", "Entity"));
         DataWatcherItem_VALUE = getFields(DataWatcherItem, Object.class).get(0);
-        PacketPlayOutSpawnEntityLiving = getClass("network.protocol.game.PacketPlayOutSpawnEntityLiving",
-                "network.protocol.game.PacketPlayOutSpawnEntity", "PacketPlayOutSpawnEntityLiving", "Packet24MobSpawn");
-        PacketPlayOutEntityMetadata = getClass("network.protocol.game.PacketPlayOutEntityMetadata", "PacketPlayOutEntityMetadata", "Packet40EntityMetadata");
+        PacketPlayOutSpawnEntityLiving = getClass(
+                "network.protocol.game.ClientboundAddEntityPacket",
+                "network.protocol.game.PacketPlayOutSpawnEntityLiving",
+                "network.protocol.game.PacketPlayOutSpawnEntity",
+                "PacketPlayOutSpawnEntityLiving",
+                "Packet24MobSpawn"
+        );
+        PacketPlayOutEntityMetadata = getClass(
+                "network.protocol.game.ClientboundSetEntityDataPacket",
+                "network.protocol.game.PacketPlayOutEntityMetadata",
+                "PacketPlayOutEntityMetadata",
+                "Packet40EntityMetadata"
+        );
         PacketPlayOutEntityMetadata_LIST = getFields(PacketPlayOutEntityMetadata, List.class).get(0);
 
-        Class<?> NetworkManager = getClass("network.NetworkManager", "NetworkManager");
+        Class<?> NetworkManager = getClass("network.Connection", "network.NetworkManager", "NetworkManager");
         NETWORK_MANAGER = getFields(playerConnection, NetworkManager).isEmpty()
                 ? getFields(playerConnection.getSuperclass(), NetworkManager).get(0)
                 : getFields(playerConnection, NetworkManager).get(0);
@@ -130,19 +138,17 @@ public class NMSStorage {
     }
 
     private void initializeDataWatcher() throws ReflectiveOperationException {
-        Class<?> DataWatcherObject = getClass("network.syncher.DataWatcherObject", "DataWatcherObject");
-        DataWatcherRegistry = getClass("network.syncher.DataWatcherRegistry", "DataWatcherRegistry");
-        Class<?> DataWatcherSerializer = getClass("network.syncher.DataWatcherSerializer", "DataWatcherSerializer");
+        Class<?> DataWatcherObject = getClass("network.syncher.EntityDataAccessor", "network.syncher.DataWatcherObject", "DataWatcherObject");
+        Class<?> DataWatcherSerializer = getClass("network.syncher.EntityDataSerializer", "network.syncher.DataWatcherSerializer", "DataWatcherSerializer");
         newDataWatcherObject = DataWatcherObject.getConstructor(int.class, DataWatcherSerializer);
         DataWatcherItem_TYPE = getFields(DataWatcherItem, DataWatcherObject).get(0);
         DataWatcherObject_SLOT = getFields(DataWatcherObject, int.class).get(0);
         DataWatcherObject_SERIALIZER = getFields(DataWatcherObject, DataWatcherSerializer).get(0);
-        DataWatcher_REGISTER = getMethod(DataWatcher, new String[]{"register", "method_12784", "a"}, DataWatcherObject, Object.class);
+        DataWatcher_REGISTER = getMethod(DataWatcher, new String[]{"set", "register", "method_12784", "a"}, DataWatcherObject, Object.class);
         if (!is1_19_3Plus()) return;
         DataWatcher$DataValue = getClass("network.syncher.SynchedEntityData$DataValue","network.syncher.DataWatcher$b","network.syncher.DataWatcher$c");
         DataWatcher$DataValue_POSITION = getFields(DataWatcher$DataValue, int.class).get(0);
         DataWatcher$DataValue_VALUE = getFields(DataWatcher$DataValue, Object.class).get(0);
-        DataWatcher_b = DataWatcher.getMethod("b");
         DataWatcher_markDirty = getMethods(DataWatcher, DataWatcherObject).get(0);
     }
 

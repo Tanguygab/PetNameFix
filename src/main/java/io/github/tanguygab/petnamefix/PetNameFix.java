@@ -31,7 +31,7 @@ public final class PetNameFix extends JavaPlugin implements Listener {
     }
 
     private void disable() {
-        getLogger().severe("Unsupported server software/version (MC 1.9-1.21.6), disabling...");
+        getLogger().severe("Unsupported server software/version (MC 1.9-1.21.9), disabling...");
         getServer().getPluginManager().disablePlugin(this);
     }
 
