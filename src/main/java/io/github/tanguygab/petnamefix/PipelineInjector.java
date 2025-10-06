@@ -82,7 +82,9 @@ public class PipelineInjector {
                     Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
                     for (Object pack : packets) {
                         if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
-                            checkMetaData(pack);
+                            if (checkMetaData(pack)) {
+                                return;
+                            }
                         }
                     }
                 } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
@@ -122,18 +124,22 @@ public class PipelineInjector {
                 if (item == null) continue;
                 int slot;
                 Object value;
-                if (nms.is1_19_3Plus()) {
-                    slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
-                    value = nms.DataWatcher$DataValue_VALUE.get(item);
-                } else {
-                    slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
-                    value = nms.DataWatcherItem_VALUE.get(item);
-                }
-                if (slot == petOwnerPosition) {
-                    if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
-                        removedEntry = item;
-                        break;
+                try {
+                    if (nms.is1_19_3Plus()) {
+                        slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
+                        value = nms.DataWatcher$DataValue_VALUE.get(item);
+                    } else {
+                        slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
+                        value = nms.DataWatcherItem_VALUE.get(item);
                     }
+                    if (slot == petOwnerPosition) {
+                        if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
+                            removedEntry = item;
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    continue;
                 }
             }
         } catch (ConcurrentModificationException e) {
@@ -148,9 +154,6 @@ public class PipelineInjector {
         }
         
         if (removedEntry != null) {
-            if (items.size() <= 1) {
-                return true;
-            }
             items.remove(removedEntry);
             
             if (items.isEmpty()) {
@@ -196,10 +199,6 @@ public class PipelineInjector {
             try {
                 @SuppressWarnings("unchecked")
                 List<Object> originalItems = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
-                
-                if (originalItems.size() <= 1) {
-                    return true;
-                }
                 
                 originalItems.remove(removedEntry);
                 
