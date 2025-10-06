@@ -1,0 +1,45 @@
+name: Build Plugin
+
+on:
+  push:
+    branches: [ main, master ]
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: Build with Gradle
+      run: gradle clean build
+      
+    - name: Extract version from build.gradle
+      id: version
+      run: |
+        VERSION=$(grep "version = " build.gradle | sed "s/version = '//" | sed "s/'//")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Plugin version: $VERSION"
+      
+    - name: Rename JAR with version and commit hash
+      run: |
+        COMMIT_HASH=${GITHUB_SHA:0:7}
+        VERSION=${{ steps.version.outputs.version }}
+        mv build/libs/PetNameFix-*.jar build/libs/PetNameFix-${VERSION}-${COMMIT_HASH}.jar
+        echo "Final JAR name: PetNameFix-${VERSION}-${COMMIT_HASH}.jar"
+      
+    - name: Upload final JAR
+      uses: actions/upload-artifact@v4
+      with:
+        name: PetNameFix-plugin
+        path: build/libs/PetNameFix-*-*.jar
+        retention-days: 90
