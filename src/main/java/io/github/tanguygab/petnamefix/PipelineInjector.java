@@ -13,8 +13,10 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.logging.Logger;
 
 public class PipelineInjector {
@@ -29,6 +31,10 @@ public class PipelineInjector {
 
     /** Logger for debugging null metadata issues */
     private final Logger logger = Logger.getLogger("PetNameFix");
+
+    /** ThreadLocal cache to prevent infinite loops - uses identity hash codes to avoid calling hashCode() on packets */
+    private static final ThreadLocal<Set<Integer>> processedPackets =
+        ThreadLocal.withInitial(HashSet::new);
 
     public PipelineInjector() {
         Bukkit.getServer().getOnlinePlayers().forEach(this::inject);
@@ -83,7 +89,22 @@ public class PipelineInjector {
         @Override
         public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) throws Exception {
             try {
-                if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
+                // Check if we've already processed this packet to prevent infinite loops
+                // Use System.identityHashCode to avoid calling hashCode() on packets with released ByteBufs
+                Set<Integer> cache = processedPackets.get();
+                int packetId = System.identityHashCode(packet);
+
+                if (cache.contains(packetId)) {
+                    logger.warning("Detected infinite loop: packet " + packet.getClass().getSimpleName() + " already processed, skipping to prevent recursion");
+                    super.write(ctx, packet, promise);
+                    return;
+                }
+
+                // Mark packet as processed
+                cache.add(packetId);
+
+                try {
+                    if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
                     Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
                     for (Object pack : packets) {
                         if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
@@ -117,8 +138,15 @@ public class PipelineInjector {
                     }
                 }
 
-                super.write(ctx, packet, promise);
+                    super.write(ctx, packet, promise);
+                } finally {
+                    // Clean up the processed packet marker after handling
+                    cache.remove(packetId);
+                }
             } catch (Exception e) {
+                // Clean up on error too
+                int packetId = System.identityHashCode(packet);
+                processedPackets.get().remove(packetId);
                 super.write(ctx, packet, promise);
             }
         }
