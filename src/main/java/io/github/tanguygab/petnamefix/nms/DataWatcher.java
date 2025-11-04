@@ -18,7 +18,9 @@ public class DataWatcher {
 	 * @param value - value
 	 */
 	public void setValue(DataWatcherObject type, Object value){
-		dataValues.put(type.getPosition(), new DataWatcherItem(type, value));
+		if (type != null) {
+			dataValues.put(type.getPosition(), new DataWatcherItem(type, value));
+		}
 	}
 
 	/**
@@ -75,13 +77,25 @@ public class DataWatcher {
 	 */
 	@SuppressWarnings("unchecked")
 	public static DataWatcher fromNMS(Object nmsWatcher) throws ReflectiveOperationException {
+		if (nmsWatcher == null) {
+			return new DataWatcher();
+		}
+		
 		DataWatcher watcher = new DataWatcher();
-		List<Object> items = (List<Object>) nmsWatcher.getClass().getMethod("c").invoke(nmsWatcher);
-		if (items != null) {
-			for (Object watchableObject : items) {
-				DataWatcherItem w = DataWatcherItem.fromNMS(watchableObject);
-				watcher.setValue(w.getType(), w.getValue());
+		try {
+			List<Object> items = (List<Object>) nmsWatcher.getClass().getMethod("c").invoke(nmsWatcher);
+			if (items != null) {
+				for (Object watchableObject : items) {
+					if (watchableObject != null) {
+						DataWatcherItem w = DataWatcherItem.fromNMS(watchableObject);
+						if (w != null && w.getType() != null) {
+							watcher.setValue(w.getType(), w.getValue());
+						}
+					}
+				}
 			}
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 		return watcher;
 	}

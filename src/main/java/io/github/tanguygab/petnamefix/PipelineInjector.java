@@ -11,8 +11,13 @@ import io.netty.channel.ChannelPromise;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.logging.Logger;
 
 public class PipelineInjector {
 
@@ -23,6 +28,13 @@ public class PipelineInjector {
 
     /** DataWatcher position of pet owner field */
     private final int petOwnerPosition = getPetOwnerPosition();
+
+    /** Logger for debugging null metadata issues */
+    private final Logger logger = Logger.getLogger("PetNameFix");
+
+    /** ThreadLocal cache to prevent infinite loops - uses identity hash codes to avoid calling hashCode() on packets */
+    private static final ThreadLocal<Set<Integer>> processedPackets =
+        ThreadLocal.withInitial(HashSet::new);
 
     public PipelineInjector() {
         Bukkit.getServer().getOnlinePlayers().forEach(this::inject);
@@ -43,17 +55,25 @@ public class PipelineInjector {
 
     public void inject(Player player) {
         final Channel channel = getChannel(player);
-        if (channel != null && channel.pipeline().names().contains("packet_handler"))
+        if (channel != null && channel.pipeline().names().contains("packet_handler")) {
             try {
                 uninject(player);
                 channel.pipeline().addBefore("packet_handler", DECODER_NAME, new BukkitChannelDuplexHandler());
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void uninject(Player player) {
         final Channel channel = getChannel(player);
-        if (channel != null && channel.pipeline().names().contains(DECODER_NAME))
-            channel.pipeline().remove(DECODER_NAME);
+        if (channel != null && channel.pipeline().names().contains(DECODER_NAME)) {
+            try {
+                channel.pipeline().remove(DECODER_NAME);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private Channel getChannel(Player player) {
@@ -69,11 +89,28 @@ public class PipelineInjector {
         @Override
         public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) throws Exception {
             try {
-                if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
+                // Check if we've already processed this packet to prevent infinite loops
+                // Use System.identityHashCode to avoid calling hashCode() on packets with released ByteBufs
+                Set<Integer> cache = processedPackets.get();
+                int packetId = System.identityHashCode(packet);
+
+                if (cache.contains(packetId)) {
+                    logger.warning("Detected infinite loop: packet " + packet.getClass().getSimpleName() + " already processed, skipping to prevent recursion");
+                    super.write(ctx, packet, promise);
+                    return;
+                }
+
+                // Mark packet as processed
+                cache.add(packetId);
+
+                try {
+                    if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
                     Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
                     for (Object pack : packets) {
                         if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
-                            checkMetaData(pack);
+                            if (checkMetaData(pack)) {
+                                return;
+                            }
                         }
                     }
                 } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
@@ -87,8 +124,29 @@ public class PipelineInjector {
                         nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER.set(packet,watcher.toNMS());
                     }
                 }
-                super.write(ctx, packet, promise);
+
+                // Final safety check: ensure metadata packets don't contain null elements before sending
+                if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
+                    @SuppressWarnings("unchecked")
+                    List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
+                    if (items != null) {
+                        long nullCount = items.stream().filter(Objects::isNull).count();
+                        if (nullCount > 0) {
+                            logger.warning("Final check: removing " + nullCount + " null element(s) from metadata packet before sending");
+                            items.removeIf(Objects::isNull);
+                        }
+                    }
+                }
+
+                    super.write(ctx, packet, promise);
+                } finally {
+                    // Clean up the processed packet marker after handling
+                    cache.remove(packetId);
+                }
             } catch (Exception e) {
+                // Clean up on error too
+                int packetId = System.identityHashCode(packet);
+                processedPackets.get().remove(packetId);
                 super.write(ctx, packet, promise);
             }
         }
@@ -96,15 +154,88 @@ public class PipelineInjector {
 
     @SuppressWarnings("unchecked")
     private boolean checkMetaData(Object packet) throws ReflectiveOperationException {
+        return checkMetaData(packet, 0);
+    }
+
+    private boolean checkMetaData(Object packet, int retryCount) throws ReflectiveOperationException {
+        if (retryCount > 3) {
+            return false;
+        }
         Object removedEntry = null;
+        @SuppressWarnings("unchecked")
         List<Object> items = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
         if (items == null || items.isEmpty()) return false;
+
+        // Pre-check: log if there are any null items in the list before processing
+        long preNullCount = items.stream().filter(Objects::isNull).count();
+        if (preNullCount > 0) {
+            logger.warning("Detected " + preNullCount + " null element(s) in metadata list BEFORE processing - this may indicate an issue with packet creation");
+        }
         
         try {
             for (Object item : items) {
                 if (item == null) continue;
                 int slot;
                 Object value;
+                try {
+                    if (nms.is1_19_3Plus()) {
+                        slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
+                        value = nms.DataWatcher$DataValue_VALUE.get(item);
+                    } else {
+                        slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
+                        value = nms.DataWatcherItem_VALUE.get(item);
+                    }
+                    if (slot == petOwnerPosition) {
+                        if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
+                            removedEntry = item;
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    continue;
+                }
+            }
+        } catch (ConcurrentModificationException e) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<Object> originalItems = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
+                List<Object> itemsCopy = new ArrayList<>(originalItems);
+                return processMetadataItems(itemsCopy, packet, retryCount + 1);
+            } catch (Exception ex) {
+                return false;
+            }
+        }
+        
+        if (removedEntry != null) {
+            items.remove(removedEntry);
+
+            // Remove any null elements that may have been introduced
+            long nullCount = items.stream().filter(Objects::isNull).count();
+            if (nullCount > 0) {
+                logger.warning("Found " + nullCount + " null element(s) in metadata list after removing pet owner data, cleaning up...");
+                items.removeIf(Objects::isNull);
+            }
+
+            if (items.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean processMetadataItems(List<Object> itemsCopy, Object packet, int retryCount) throws ReflectiveOperationException {
+        if (retryCount > 3) {
+            return false;
+        }
+
+        Object removedEntry = null;
+        
+        for (Object item : itemsCopy) {
+            if (item == null) continue;
+            int slot;
+            Object value;
+            
+            try {
                 if (nms.is1_19_3Plus()) {
                     slot = nms.DataWatcher$DataValue_POSITION.getInt(item);
                     value = nms.DataWatcher$DataValue_VALUE.get(item);
@@ -112,27 +243,40 @@ public class PipelineInjector {
                     slot = nms.DataWatcherObject_SLOT.getInt(nms.DataWatcherItem_TYPE.get(item));
                     value = nms.DataWatcherItem_VALUE.get(item);
                 }
+                
                 if (slot == petOwnerPosition) {
                     if (value instanceof java.util.Optional || value instanceof com.google.common.base.Optional) {
                         removedEntry = item;
                         break;
                     }
                 }
+            } catch (Exception e) {
+                continue;
             }
-        } catch (ConcurrentModificationException e) {
-            return checkMetaData(packet);
         }
         
         if (removedEntry != null) {
-            if (items.size() <= 1) {
-                return true;
-            }
-            items.remove(removedEntry);
-            
-            if (items.isEmpty()) {
-                return true;
+            try {
+                @SuppressWarnings("unchecked")
+                List<Object> originalItems = (List<Object>) nms.PacketPlayOutEntityMetadata_LIST.get(packet);
+
+                originalItems.remove(removedEntry);
+
+                // Remove any null elements that may have been introduced
+                long nullCount = originalItems.stream().filter(Objects::isNull).count();
+                if (nullCount > 0) {
+                    logger.warning("Found " + nullCount + " null element(s) in metadata list (retry path) after removing pet owner data, cleaning up...");
+                    originalItems.removeIf(Objects::isNull);
+                }
+
+                if (originalItems.isEmpty()) {
+                    return true;
+                }
+            } catch (Exception e) {
+                return false;
             }
         }
+
         return false;
     }
 }
