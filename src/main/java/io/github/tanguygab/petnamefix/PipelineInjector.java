@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 
 import java.util.ConcurrentModificationException;
 import java.util.List;
+import java.util.Objects;
 
 public class PipelineInjector {
 
@@ -101,8 +102,8 @@ public class PipelineInjector {
         if (items == null || items.isEmpty()) return false;
         
         try {
+            if (items.contains(null)) items.removeIf(Objects::isNull);
             for (Object item : items) {
-                if (item == null) continue;
                 int slot;
                 Object value;
                 if (nms.is1_19_3Plus()) {
@@ -124,14 +125,8 @@ public class PipelineInjector {
         }
         
         if (removedEntry != null) {
-            if (items.size() <= 1) {
-                return true;
-            }
             items.remove(removedEntry);
-            
-            if (items.isEmpty()) {
-                return true;
-            }
+            return items.isEmpty();
         }
         return false;
     }
