@@ -1,6 +1,5 @@
 package io.github.tanguygab.petnamefix;
 
-import io.github.tanguygab.petnamefix.nms.NMSStorage;
 import org.bukkit.entity.Tameable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -15,30 +14,13 @@ public final class PetNameFix extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        try {
-            NMSStorage nms = new NMSStorage();
-            if (nms.getMinorVersion() < 9) {
-                disable();
-                return;
-            }
-            NMSStorage.setInstance(nms);
-            pipeline = new PipelineInjector();
-            getServer().getPluginManager().registerEvents(this,this);
-        } catch (ReflectiveOperationException e) {
-            disable();
-            e.printStackTrace();
-        }
-    }
-
-    private void disable() {
-        getLogger().severe("Unsupported server software/version (MC 1.9-1.21.9), disabling...");
-        getServer().getPluginManager().disablePlugin(this);
+        pipeline = new PipelineInjector();
+        getServer().getPluginManager().registerEvents(this,this);
     }
 
     @Override
     public void onDisable() {
-        if (pipeline == null) return;
-        pipeline.unload();
+        if (pipeline != null) pipeline.unload();
     }
 
     @EventHandler
@@ -48,8 +30,7 @@ public final class PetNameFix extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onClick(PlayerInteractEntityEvent e) {
-        if (!(e.getRightClicked() instanceof Tameable)) return;
-        Tameable pet = (Tameable) e.getRightClicked();
+        if (!(e.getRightClicked() instanceof Tameable pet)) return;
         if (pet.isTamed() && pet.getOwner() == e.getPlayer() && e.getHand() == EquipmentSlot.OFF_HAND)
             e.setCancelled(true);
     }
