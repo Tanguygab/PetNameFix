@@ -51,6 +51,7 @@ public class NMSStorage {
     public Field PacketPlayOutEntityMetadata_LIST;
 
     public Class<?> ClientboundBundlePacket;
+    public Constructor<?> newClientboundBundlePacket;
     public Field ClientboundBundlePacket_packets;
 
     /**
@@ -117,6 +118,7 @@ public class NMSStorage {
         if (minorVersion <= 14) PacketPlayOutSpawnEntityLiving_DATAWATCHER = getFields(PacketPlayOutSpawnEntityLiving, DataWatcher).get(0);
         if (is1_19_4Plus) {
             ClientboundBundlePacket = getClass("network.protocol.game.ClientboundBundlePacket");
+            newClientboundBundlePacket = ClientboundBundlePacket.getDeclaredConstructors()[0];
             (ClientboundBundlePacket_packets = ClientboundBundlePacket.getSuperclass().getDeclaredFields()[0]).setAccessible(true);
         }
     }

@@ -11,6 +11,7 @@ import io.netty.channel.ChannelPromise;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Objects;
@@ -71,12 +72,15 @@ public class PipelineInjector {
         public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) throws Exception {
             try {
                 if (nms.is1_19_4Plus() && nms.ClientboundBundlePacket.isInstance(packet)) {
+                    List<Object> validPackets = new ArrayList<>();
                     Iterable<?> packets = (Iterable<?>) nms.ClientboundBundlePacket_packets.get(packet);
                     for (Object pack : packets) {
-                        if (nms.PacketPlayOutEntityMetadata.isInstance(pack)) {
-                            checkMetaData(pack);
+                        if (!nms.PacketPlayOutEntityMetadata.isInstance(pack) || !checkMetaData(pack)) {
+                            validPackets.add(pack);
                         }
                     }
+                    if (validPackets.isEmpty()) return;
+                    packet = nms.newClientboundBundlePacket.newInstance(validPackets);
                 } else if (nms.PacketPlayOutEntityMetadata.isInstance(packet)) {
                     if (checkMetaData(packet)) return;
                 } else if (nms.PacketPlayOutSpawnEntityLiving.isInstance(packet) && nms.PacketPlayOutSpawnEntityLiving_DATAWATCHER != null) {
