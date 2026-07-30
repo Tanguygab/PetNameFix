@@ -2,6 +2,8 @@ package io.github.tanguygab.petnamefix;
 
 import io.netty.channel.*;
 import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -13,10 +15,7 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Field;
-import java.util.ConcurrentModificationException;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 public class PipelineInjector {
 
@@ -75,11 +74,15 @@ public class PipelineInjector {
         public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) throws Exception {
             switch (packet) {
                 case ClientboundBundlePacket bundle -> {
+                    List<Packet<? super ClientGamePacketListener>> validPackets = new ArrayList<>();
                     for (Object pack : bundle.subPackets()) {
-                        if (pack instanceof ClientboundSetEntityDataPacket add) {
-                            checkMetaData(add);
+                        if (!(pack instanceof ClientboundSetEntityDataPacket add) || !checkMetaData(add)) {
+                            //noinspection unchecked
+                            validPackets.add((Packet<? super ClientGamePacketListener>) pack);
                         }
                     }
+                    if (validPackets.isEmpty()) return;
+                    super.write(ctx, new ClientboundBundlePacket(validPackets), promise);
                 }
                 case ClientboundSetEntityDataPacket add -> {
                     if (checkMetaData(add)) return;
