@@ -82,7 +82,7 @@ public class PipelineInjector {
                         }
                     }
                     if (validPackets.isEmpty()) return;
-                    super.write(ctx, new ClientboundBundlePacket(validPackets), promise);
+                    packet = new ClientboundBundlePacket(validPackets);
                 }
                 case ClientboundSetEntityDataPacket add -> {
                     if (checkMetaData(add)) return;
